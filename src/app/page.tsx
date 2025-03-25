@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, FormEvent, useEffect, Suspense } from 'react';
-import dynamic from 'next/dynamic';
 import Preview from './components/Preview';
 import { useRouter } from 'next/navigation';
+import StyleSelector from './generate/styles/StyleSelector';
 
 interface FormData {
   businessName: string;
@@ -28,6 +28,7 @@ interface FormData {
   needsBookingSystem: boolean;
   metaKeywords: string;
   metaDescription: string;
+  designStyles: string[];
 }
 
 interface GenerationStatus {
@@ -270,7 +271,8 @@ function generateRandomData() {
     hasPortfolio: randomBool(),
     needsBookingSystem: randomBool(),
     metaKeywords: `${businessType}, שירות, איכות, מקצועיות, ישראל`,
-    metaDescription: `${businessType} מוביל המספק שירות מקצועי ואיכותי. הזמינו תור עוד היום!`
+    metaDescription: `${businessType} מוביל המספק שירות מקצועי ואיכותי. הזמינו תור עוד היום!`,
+    designStyles: [],
   };
 }
 
@@ -281,11 +283,11 @@ export default function Home() {
     industry: '',
     businessSize: '',
     description: '',
-    primaryColor: '#000000',
-    secondaryColor: '#ffffff',
-    typographyStyle: 'modern',
-    animationPreference: 'minimal',
     language: 'he',
+    primaryColor: '#3498db',
+    secondaryColor: '#2ecc71',
+    typographyStyle: 'modern',
+    animationPreference: 'subtle',
     headline: '',
     descriptionText: '',
     ctaText: '',
@@ -296,8 +298,9 @@ export default function Home() {
     hasServices: false,
     hasPortfolio: false,
     needsBookingSystem: false,
+    metaDescription: '',
     metaKeywords: '',
-    metaDescription: ''
+    designStyles: [],
   });
 
   const [generatedPageUrl, setGeneratedPageUrl] = useState<string>('');
@@ -345,6 +348,9 @@ export default function Home() {
 
   const router = useRouter();
 
+  // הוספת סטייט לשלבים
+  const [step, setStep] = useState<number>(0);
+
   useEffect(() => {
     // טעינת רשימת הפרויקטים בטעינת הדף
     fetch('/api/projects')
@@ -378,15 +384,54 @@ export default function Home() {
     try {
       console.log(`${consoleColors.cyan}🚀 [Form] Submitting form data${consoleColors.green} 🌟${consoleColors.reset}`);
       
-      const formData = new FormData(e.currentTarget);
+      // במקום להשתמש ב-FormData מה-DOM, שאינו מכיל את כל השדות בתצוגה מדורגת,
+      // ניצור אובייקט FormData מנתוני ה-state המלאים
+      const formDataObj = new FormData();
+      
+      // הוספת כל השדות החיוניים מה-state
+      formDataObj.append('businessName', formData.businessName);
+      formDataObj.append('businessType', formData.businessType);
+      formDataObj.append('industry', formData.industry);
+      formDataObj.append('businessSize', formData.businessSize);
+      formDataObj.append('description', formData.description);
+      formDataObj.append('language', formData.language);
+      formDataObj.append('primaryColor', formData.primaryColor);
+      formDataObj.append('secondaryColor', formData.secondaryColor);
+      formDataObj.append('typographyStyle', formData.typographyStyle);
+      formDataObj.append('animationPreference', formData.animationPreference);
+      formDataObj.append('headline', formData.headline);
+      formDataObj.append('descriptionText', formData.descriptionText);
+      formDataObj.append('ctaText', formData.ctaText);
+      formDataObj.append('formFields', formData.formFields);
+      
+      // הוספת שדות בוליאניים
+      formDataObj.append('includeTestimonials', formData.includeTestimonials.toString());
+      formDataObj.append('includeFAQ', formData.includeFAQ.toString());
+      formDataObj.append('hasProducts', formData.hasProducts.toString());
+      formDataObj.append('hasServices', formData.hasServices.toString());
+      formDataObj.append('hasPortfolio', formData.hasPortfolio.toString());
+      formDataObj.append('needsBookingSystem', formData.needsBookingSystem.toString());
+      
+      // הוספת מטא-נתונים
+      formDataObj.append('metaDescription', formData.metaDescription);
+      formDataObj.append('metaKeywords', formData.metaKeywords);
+      
+      // טיפול בשדות מערך (אם קיימים)
+      if (formData.designStyles && formData.designStyles.length > 0) {
+        formData.designStyles.forEach((styleId) => {
+          formDataObj.append('designStyles', styleId);
+        });
+      }
+      
       const response = await fetch('/api/generate', {
         method: 'POST',
-        body: formData,
+        body: formDataObj,
       });
 
       if (!response.ok) {
         console.error(`${consoleColors.red}❌ [Form] Error submitting form data 🔴${consoleColors.reset}`);
-        throw new Error('Error submitting form');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error submitting form');
       }
 
       const data = await response.json();
@@ -516,52 +561,11 @@ export default function Home() {
     };
   };
 
-  // עדכון הפונקציה getOrderedComponents
-  const getOrderedComponents = () => {
-    if (!components.length || isGenerating) return [];
-    
-    const validComponents = Object.keys(ComponentSkeleton);
-    
-    // סינון רק קומפוננטות תקינות
-    const filteredComponents = components.filter(component => 
-      validComponents.includes(component)
-    );
-    
-    const order = [
-      'Header',
-      'Hero',
-      'Services',
-      'ProductShowcase',
-      'BookingForm',
-      'Testimonials',
-      'FAQ',
-      'Footer'
-    ];
-    
-    return filteredComponents
-      .sort((a, b) => {
-        const aIndex = order.indexOf(a);
-        const bIndex = order.indexOf(b);
-        if (aIndex === -1) return 1;
-        if (bIndex === -1) return -1;
-        return aIndex - bIndex;
-      })
-      .filter(component => {
-        switch (component) {
-          case 'Services':
-            return formData.hasServices;
-          case 'ProductShowcase':
-            return formData.hasProducts;
-          case 'BookingForm':
-            return formData.needsBookingSystem;
-          case 'Testimonials':
-            return formData.includeTestimonials;
-          case 'FAQ':
-            return formData.includeFAQ;
-          default:
-            return true;
-        }
-      });
+  const handleInputChange = (field: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
   };
 
   const handleProjectSelect = async (projectName: string) => {
@@ -676,6 +680,28 @@ export default function Home() {
     );
   };
 
+  const steps = [
+    "פרטי העסק",
+    "סגנון וחוויית משתמש",
+    "תוכן",
+    "תכונות מתקדמות",
+    "סגנונות עיצוב",
+    "יצירת האתר"
+  ];
+  
+  // פונקציות ניווט בין השלבים
+  const nextStep = () => {
+    if (step < steps.length - 1) {
+      setStep(step + 1);
+    }
+  };
+  
+  const prevStep = () => {
+    if (step > 0) {
+      setStep(step - 1);
+    }
+  };
+
   return (
     <main className="min-h-screen p-8">
       <h1 className="text-4xl font-bold text-center mb-8">יוצר דפי נחיתה חכם</h1>
@@ -707,6 +733,28 @@ export default function Home() {
                 ></div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* תצוגת שלבים */}
+      {!generationResult && (
+        <div className="max-w-2xl mx-auto mb-6">
+          <div className="flex justify-between">
+            {steps.map((stepName, index) => (
+              <div 
+                key={index}
+                className={`text-sm font-medium ${index <= step ? 'text-blue-600' : 'text-gray-400'}`}
+              >
+                {stepName}
+              </div>
+            ))}
+          </div>
+          <div className="w-full bg-gray-200 h-2 mt-2 rounded-full">
+            <div 
+              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${(step / (steps.length - 1)) * 100}%` }}
+            ></div>
           </div>
         </div>
       )}
@@ -752,196 +800,369 @@ export default function Home() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-2">שם העסק</label>
-            <input
-              type="text"
-              name="businessName"
-              value={formData.businessName}
-              onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
-              required
-              className="w-full p-2 border rounded-lg"
+          {/* שלב 1 - פרטי העסק */}
+          {step === 0 && (
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium mb-2">שם העסק</label>
+                <input
+                  type="text"
+                  name="businessName"
+                  value={formData.businessName}
+                  onChange={(e) => handleInputChange('businessName', e.target.value)}
+                  required
+                  className="w-full p-2 border rounded-lg"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">סוג העסק</label>
+                <input
+                  type="text"
+                  name="businessType"
+                  value={formData.businessType}
+                  onChange={(e) => handleInputChange('businessType', e.target.value)}
+                  required
+                  className="w-full p-2 border rounded-lg"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">תעשייה</label>
+                <input
+                  type="text"
+                  name="industry"
+                  value={formData.industry}
+                  onChange={(e) => handleInputChange('industry', e.target.value)}
+                  required
+                  className="w-full p-2 border rounded-lg"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">גודל העסק</label>
+                <select 
+                  name="businessSize" 
+                  value={formData.businessSize}
+                  onChange={(e) => handleInputChange('businessSize', e.target.value)}
+                  className="w-full p-2 border rounded-lg"
+                >
+                  <option value="small">קטן</option>
+                  <option value="medium">בינוני</option>
+                  <option value="large">גדול</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">תיאור</label>
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={(e) => handleInputChange('description', e.target.value)}
+                  required
+                  className="w-full p-2 border rounded-lg"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">שפה</label>
+                <select 
+                  name="language" 
+                  value={formData.language}
+                  onChange={(e) => handleInputChange('language', e.target.value)}
+                  className="w-full p-2 border rounded-lg"
+                >
+                  <option value="he">עברית</option>
+                  <option value="en">אנגלית</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* שלב 2 - סגנון וחוויית משתמש */}
+          {step === 1 && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">צבע ראשי</label>
+                  <input
+                    type="color"
+                    name="primaryColor"
+                    value={formData.primaryColor}
+                    onChange={(e) => handleInputChange('primaryColor', e.target.value)}
+                    className="w-full p-1 border rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">צבע משני</label>
+                  <input
+                    type="color"
+                    name="secondaryColor"
+                    value={formData.secondaryColor}
+                    onChange={(e) => handleInputChange('secondaryColor', e.target.value)}
+                    className="w-full p-1 border rounded-lg"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">סגנון טיפוגרפיה</label>
+                <select 
+                  name="typographyStyle" 
+                  value={formData.typographyStyle}
+                  onChange={(e) => handleInputChange('typographyStyle', e.target.value)}
+                  className="w-full p-2 border rounded-lg"
+                >
+                  <option value="modern">מודרני</option>
+                  <option value="classic">קלאסי</option>
+                  <option value="playful">שובבי</option>
+                  <option value="minimal">מינימליסטי</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">רמת אנימציות</label>
+                <select 
+                  name="animationPreference" 
+                  value={formData.animationPreference}
+                  onChange={(e) => handleInputChange('animationPreference', e.target.value)}
+                  className="w-full p-2 border rounded-lg"
+                >
+                  <option value="minimal">מינימלית</option>
+                  <option value="moderate">בינונית</option>
+                  <option value="extensive">מרובה</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* שלב 3 - תוכן */}
+          {step === 2 && (
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium mb-2">כותרת ראשית</label>
+                <input
+                  type="text"
+                  name="headline"
+                  value={formData.headline}
+                  onChange={(e) => handleInputChange('headline', e.target.value)}
+                  className="w-full p-2 border rounded-lg"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">טקסט תיאור</label>
+                <textarea
+                  name="descriptionText"
+                  value={formData.descriptionText}
+                  onChange={(e) => handleInputChange('descriptionText', e.target.value)}
+                  className="w-full p-2 border rounded-lg"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">טקסט לכפתור קריאה לפעולה</label>
+                <input
+                  type="text"
+                  name="ctaText"
+                  value={formData.ctaText}
+                  onChange={(e) => handleInputChange('ctaText', e.target.value)}
+                  className="w-full p-2 border rounded-lg"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-2">שדות טופס (מופרדים בפסיקים)</label>
+                <input
+                  type="text"
+                  name="formFields"
+                  value={formData.formFields}
+                  onChange={(e) => handleInputChange('formFields', e.target.value)}
+                  className="w-full p-2 border rounded-lg"
+                  placeholder="שם, טלפון, אימייל, הודעה"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* שלב 4 - תכונות מתקדמות */}
+          {step === 3 && (
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    name="includeTestimonials"
+                    id="includeTestimonials"
+                    checked={formData.includeTestimonials}
+                    onChange={(e) => handleInputChange('includeTestimonials', e.target.checked)}
+                    className="ml-2"
+                  />
+                  <label htmlFor="includeTestimonials">כלול המלצות</label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    name="includeFAQ"
+                    id="includeFAQ"
+                    checked={formData.includeFAQ}
+                    onChange={(e) => handleInputChange('includeFAQ', e.target.checked)}
+                    className="ml-2"
+                  />
+                  <label htmlFor="includeFAQ">כלול שאלות נפוצות</label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    name="hasProducts"
+                    id="hasProducts"
+                    checked={formData.hasProducts}
+                    onChange={(e) => handleInputChange('hasProducts', e.target.checked)}
+                    className="ml-2"
+                  />
+                  <label htmlFor="hasProducts">יש מוצרים</label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    name="hasServices"
+                    id="hasServices"
+                    checked={formData.hasServices}
+                    onChange={(e) => handleInputChange('hasServices', e.target.checked)}
+                    className="ml-2"
+                  />
+                  <label htmlFor="hasServices">יש שירותים</label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    name="hasPortfolio"
+                    id="hasPortfolio"
+                    checked={formData.hasPortfolio}
+                    onChange={(e) => handleInputChange('hasPortfolio', e.target.checked)}
+                    className="ml-2"
+                  />
+                  <label htmlFor="hasPortfolio">יש תיק עבודות</label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    name="needsBookingSystem"
+                    id="needsBookingSystem"
+                    checked={formData.needsBookingSystem}
+                    onChange={(e) => handleInputChange('needsBookingSystem', e.target.checked)}
+                    className="ml-2"
+                  />
+                  <label htmlFor="needsBookingSystem">צריך מערכת הזמנות</label>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-2">מילות מפתח למטא (SEO)</label>
+                <input
+                  type="text"
+                  name="metaKeywords"
+                  value={formData.metaKeywords}
+                  onChange={(e) => handleInputChange('metaKeywords', e.target.value)}
+                  className="w-full p-2 border rounded-lg"
+                  placeholder="מילות מפתח, מופרדות, בפסיקים"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-2">תיאור מטא (SEO)</label>
+                <textarea
+                  name="metaDescription"
+                  value={formData.metaDescription}
+                  onChange={(e) => handleInputChange('metaDescription', e.target.value)}
+                  className="w-full p-2 border rounded-lg"
+                  rows={2}
+                  placeholder="תיאור קצר של האתר עבור מנועי חיפוש"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* שלב 5 - סגנונות עיצוב */}
+          {step === 4 && (
+            <StyleSelector
+              selectedStyles={formData.designStyles || []}
+              onChange={(styles) => handleInputChange('designStyles', styles)}
+              direction={formData.language === 'he' ? 'rtl' : 'ltr'}
             />
-          </div>
+          )}
 
-          <div>
-            <label className="block text-sm font-medium mb-2">סוג העסק</label>
-            <input
-              type="text"
-              name="businessType"
-              value={formData.businessType}
-              onChange={(e) => setFormData({ ...formData, businessType: e.target.value })}
-              required
-              className="w-full p-2 border rounded-lg"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">תעשייה</label>
-            <input
-              type="text"
-              name="industry"
-              value={formData.industry}
-              onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
-              required
-              className="w-full p-2 border rounded-lg"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">גודל העסק</label>
-            <select 
-              name="businessSize" 
-              value={formData.businessSize}
-              onChange={(e) => setFormData({ ...formData, businessSize: e.target.value })}
-              className="w-full p-2 border rounded-lg"
-            >
-              <option value="small">קטן</option>
-              <option value="medium">בינוני</option>
-              <option value="large">גדול</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">תיאור</label>
-            <textarea
-              name="description"
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              required
-              className="w-full p-2 border rounded-lg"
-              rows={3}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">צבע ראשי</label>
-              <input
-                type="color"
-                name="primaryColor"
-                value={formData.primaryColor}
-                onChange={(e) => setFormData({ ...formData, primaryColor: e.target.value })}
-                className="w-full p-1 border rounded-lg"
-              />
+          {/* שלב 6 - יצירת האתר */}
+          {step === 5 && (
+            <div className="space-y-6">
+              <div className="p-6 bg-blue-50 rounded-lg border border-blue-200">
+                <h3 className="text-xl font-semibold mb-2">מוכן ליצירת האתר!</h3>
+                <p className="text-gray-700">
+                  כל הפרטים הוזנו בהצלחה. לחץ על כפתור "צור דף נחיתה" כדי להתחיל בתהליך היצירה.
+                </p>
+                
+                <div className="mt-4 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="font-medium">שם העסק:</span>
+                    <span>{formData.businessName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">סוג העסק:</span>
+                    <span>{formData.businessType}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">צבעים:</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: formData.primaryColor }}></div>
+                      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: formData.secondaryColor }}></div>
+                    </div>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">סגנונות עיצוב שנבחרו:</span>
+                    <span>
+                      {formData.designStyles?.length 
+                        ? formData.designStyles.length
+                        : 'ללא סגנון ספציפי'
+                      }
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">צבע משני</label>
-              <input
-                type="color"
-                name="secondaryColor"
-                value={formData.secondaryColor}
-                onChange={(e) => setFormData({ ...formData, secondaryColor: e.target.value })}
-                className="w-full p-1 border rounded-lg"
-              />
-            </div>
-          </div>
+          )}
 
-          <div>
-            <label className="block text-sm font-medium mb-2">סגנון טיפוגרפיה</label>
-            <select 
-              name="typographyStyle" 
-              value={formData.typographyStyle}
-              onChange={(e) => setFormData({ ...formData, typographyStyle: e.target.value })}
-              className="w-full p-2 border rounded-lg"
-            >
-              <option value="modern">מודרני</option>
-              <option value="classic">קלאסי</option>
-              <option value="playful">שובבי</option>
-              <option value="minimal">מינימליסטי</option>
-            </select>
+          {/* כפתורי ניווט בין השלבים */}
+          <div className="flex justify-between mt-6">
+            {step > 0 && (
+              <button
+                type="button"
+                onClick={prevStep}
+                className="bg-gray-300 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-400"
+              >
+                הקודם
+              </button>
+            )}
+            
+            {step < steps.length - 1 ? (
+              <button
+                type="button"
+                onClick={nextStep}
+                className="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 ml-auto"
+              >
+                הבא
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={isGenerating}
+                className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 disabled:bg-gray-400"
+              >
+                {isGenerating ? 'יוצר דף נחיתה...' : 'צור דף נחיתה'}
+              </button>
+            )}
           </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">רמת אנימציות</label>
-            <select 
-              name="animationPreference" 
-              value={formData.animationPreference}
-              onChange={(e) => setFormData({ ...formData, animationPreference: e.target.value })}
-              className="w-full p-2 border rounded-lg"
-            >
-              <option value="minimal">מינימלית</option>
-              <option value="moderate">בינונית</option>
-              <option value="extensive">מרובה</option>
-            </select>
-          </div>
-
-          <div className="space-y-4">
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                name="includeTestimonials"
-                id="includeTestimonials"
-                checked={formData.includeTestimonials}
-                onChange={(e) => setFormData({ ...formData, includeTestimonials: e.target.checked })}
-                className="ml-2"
-              />
-              <label htmlFor="includeTestimonials">כלול המלצות</label>
-            </div>
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                name="includeFAQ"
-                id="includeFAQ"
-                checked={formData.includeFAQ}
-                onChange={(e) => setFormData({ ...formData, includeFAQ: e.target.checked })}
-                className="ml-2"
-              />
-              <label htmlFor="includeFAQ">כלול שאלות נפוצות</label>
-            </div>
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                name="hasProducts"
-                id="hasProducts"
-                checked={formData.hasProducts}
-                onChange={(e) => setFormData({ ...formData, hasProducts: e.target.checked })}
-                className="ml-2"
-              />
-              <label htmlFor="hasProducts">יש מוצרים</label>
-            </div>
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                name="hasServices"
-                id="hasServices"
-                checked={formData.hasServices}
-                onChange={(e) => setFormData({ ...formData, hasServices: e.target.checked })}
-                className="ml-2"
-              />
-              <label htmlFor="hasServices">יש שירותים</label>
-            </div>
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                name="hasPortfolio"
-                id="hasPortfolio"
-                checked={formData.hasPortfolio}
-                onChange={(e) => setFormData({ ...formData, hasPortfolio: e.target.checked })}
-                className="ml-2"
-              />
-              <label htmlFor="hasPortfolio">יש תיק עבודות</label>
-            </div>
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                name="needsBookingSystem"
-                id="needsBookingSystem"
-                checked={formData.needsBookingSystem}
-                onChange={(e) => setFormData({ ...formData, needsBookingSystem: e.target.checked })}
-                className="ml-2"
-              />
-              <label htmlFor="needsBookingSystem">צריך מערכת הזמנות</label>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isGenerating}
-            className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 disabled:bg-gray-400"
-          >
-            {isGenerating ? 'יוצר דף נחיתה...' : 'צור דף נחיתה'}
-          </button>
         </form>
       )}
 
