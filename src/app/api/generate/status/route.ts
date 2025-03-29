@@ -9,6 +9,8 @@ interface ComponentStatus {
   type: string;
   status: 'completed' | 'failed' | 'pending';
   error?: string;
+  prompt?: string;
+  description?: string;
 }
 
 // Interface for project status
@@ -62,11 +64,20 @@ export async function GET(req: NextRequest) {
     const projectDir = url.searchParams.get('project');
     
     if (!projectDir) {
-      return NextResponse.json({ error: 'Missing project parameter' }, { status: 400 });
+      logger.error('שם פרויקט לא סופק');
+      return NextResponse.json({ error: 'שם פרויקט לא סופק' }, { status: 400 });
     }
     
-    const baseDir = path.join(process.cwd(), 'tmp');
+    const baseDir = path.join(process.cwd(), 'landing-pages');
     const projectPath = path.join(baseDir, projectDir);
+    
+    // בדוק שהתיקייה קיימת
+    try {
+      await fs.access(projectPath);
+    } catch (err) {
+      logger.error(`פרויקט לא נמצא: ${projectPath}`, err);
+      return NextResponse.json({ error: 'פרויקט לא נמצא' }, { status: 404 });
+    }
     
     // Get component status information
     const components = await getComponentsStatus(projectPath);
@@ -77,8 +88,8 @@ export async function GET(req: NextRequest) {
       pageStatus
     });
   } catch (error) {
-    console.error('Error in status API route:', error);
-    return NextResponse.json({ error: 'Failed to get project status' }, { status: 500 });
+    logger.error('שגיאה בקבלת סטטוס הפרויקט', error);
+    return NextResponse.json({ error: 'שגיאה בקבלת סטטוס הפרויקט' }, { status: 500 });
   }
 }
 
@@ -86,7 +97,7 @@ async function getComponentsStatus(projectPath: string) {
   const componentsDir = path.join(projectPath, 'src', 'components');
   const pagePath = path.join(projectPath, 'src', 'app', 'page.tsx');
   let pageContent = '';
-  let importedComponents: string[] = [];
+  let importedComponents: Array<{ name: string; path: string }> = [];
   
   try {
     // Read page content to check for imported components

@@ -20,11 +20,9 @@ export function createPackageJson(formData: FormData): string {
     "lint": "next lint"
   },
   "dependencies": {
-    "next": "14.0.4",
+    "next": "^14.0.4",
     "react": "^18",
-    "react-dom": "^18",
-    "framer-motion": "^10.16.4",
-    "tailwindcss-animate": "^1.0.7"
+    "react-dom": "^18"
   },
   "devDependencies": {
     "@types/node": "^20",
@@ -32,7 +30,7 @@ export function createPackageJson(formData: FormData): string {
     "@types/react-dom": "^18",
     "autoprefixer": "^10.0.1",
     "eslint": "^8",
-    "eslint-config-next": "14.0.4",
+    "eslint-config-next": "^14.0.4",
     "postcss": "^8",
     "tailwindcss": "^3.3.0",
     "typescript": "^5"

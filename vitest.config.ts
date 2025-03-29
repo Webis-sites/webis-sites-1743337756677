@@ -7,12 +7,14 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    setupFiles: ["./vitest.setup.ts"],
+    setupFiles: ["./src/test/setup.ts"],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
   },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      "@tmp": path.resolve(__dirname, "./tmp"),
+      "@landing-pages": path.resolve(__dirname, "./landing-pages"),
+      "@versions": path.resolve(__dirname, "./landing-pages/versions"),
     },
   },
 });

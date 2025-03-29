@@ -14,10 +14,11 @@ export async function POST(req: NextRequest) {
     const { projectDir } = await req.json();
     
     if (!projectDir) {
+      logger.error('שם פרויקט לא סופק');
       return NextResponse.json({ error: 'שם פרויקט לא סופק' }, { status: 400 });
     }
     
-    const baseDir = path.join(process.cwd(), 'tmp');
+    const baseDir = path.join(process.cwd(), 'landing-pages');
     const projectPath = path.join(baseDir, projectDir);
     
     // בדוק אם יש פרויקט שכבר רץ על הפורט
@@ -62,16 +63,16 @@ export async function POST(req: NextRequest) {
     logger.info(`הרצת הפרויקט בפורט ${port}`);
     
     // הרץ את הפרויקט ברקע
-    const process = exec(`npm run dev -- -p ${port}`, { cwd: projectPath });
+    const npmProcess = exec(`npm run dev -- -p ${port}`, { cwd: projectPath });
     
     // שמור את ה-PID לשימוש מאוחר יותר (לסגירת התהליך)
-    const pid = process.pid || 0;
+    const pid = npmProcess.pid || 0;
     
     // שמור מידע על התהליך הרץ
     activePorts[projectDir] = { port, pid };
     
     // שמור את הפורט ו-PID בקובץ JSON
-    const portsPath = path.join(baseDir, 'ports.json');
+    const portsPath = path.join(process.cwd(), 'landing-pages', 'ports.json');
     let portsData: Record<string, { port: number, pid: number }> = {};
     
     try {
@@ -110,6 +111,7 @@ export async function GET(req: NextRequest) {
     const projectDir = url.searchParams.get('project');
     
     if (!projectDir) {
+      logger.error('שם פרויקט לא סופק');
       return NextResponse.json({ error: 'שם פרויקט לא סופק' }, { status: 400 });
     }
     
@@ -123,7 +125,7 @@ export async function GET(req: NextRequest) {
     }
     
     // בדוק גם בקובץ
-    const portsPath = path.join(process.cwd(), 'tmp', 'ports.json');
+    const portsPath = path.join(process.cwd(), 'landing-pages', 'ports.json');
     
     try {
       const portsContent = await fs.readFile(portsPath, 'utf-8');
@@ -148,6 +150,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ running: false });
     
   } catch (error) {
+    logger.error('שגיאה בבדיקת סטטוס הרצה', error);
     return NextResponse.json({ error: 'שגיאה בבדיקת סטטוס הרצה' }, { status: 500 });
   }
 } 

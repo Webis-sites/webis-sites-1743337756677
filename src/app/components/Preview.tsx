@@ -8,7 +8,7 @@ const colors = {
 };
 
 interface PreviewProps {
-  projectName: string;
+  projectDir: string;
 }
 
 interface PreviewStatus {
@@ -23,9 +23,10 @@ interface ComponentStatus {
   description?: string;
   status: 'completed' | 'failed' | 'pending';
   error?: string;
+  prompt?: string;
 }
 
-export default function Preview({ projectName }: PreviewProps) {
+export default function Preview({ projectDir }: PreviewProps) {
   const [previewStatus, setPreviewStatus] = useState<PreviewStatus>({ status: 'loading' });
   const [projectData, setProjectData] = useState<any>(null);
   const [components, setComponents] = useState<ComponentStatus[]>([]);
@@ -54,7 +55,7 @@ export default function Preview({ projectName }: PreviewProps) {
       const response = await fetch('/api/generate/install', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectDir: projectName })
+        body: JSON.stringify({ projectDir: projectDir })
       });
       
       if (!response.ok) {
@@ -125,26 +126,32 @@ export default function Preview({ projectName }: PreviewProps) {
   // Function to fetch project structure and components
   const fetchProjectData = async () => {
     try {
-      if (!projectName) {
-        addLog(`Invalid project name: ${projectName}`);
-        throw new Error('שם פרויקט לא תקין');
+      console.log('projectDir', projectDir);
+      if (!projectDir) {
+        addLog('שם הפרויקט חסר');
+        setPreviewStatus({
+          status: 'error',
+          error: 'שם הפרויקט חסר'
+        });
+        return;
       }
 
-      addLog(`Fetching data for project: ${projectName}`);
-      const response = await fetch(`/api/generate/preview?project=${projectName}`);
+      addLog(`מביא נתונים עבור הפרויקט: ${projectDir}`);
+      const response = await fetch(`/api/generate/preview?project=${encodeURIComponent(projectDir)}`);
       
+      console.log('responseresponse', response);
       if (!response.ok) {
         const errorText = await response.text();
-        addLog(`Error response from preview API: ${errorText}`);
-        throw new Error(`Error fetching project data: ${response.status}`);
+        addLog(`שגיאה בתשובת ה-API: ${errorText}`);
+        throw new Error(`שגיאה בהבאת נתוני הפרויקט: ${response.status}`);
       }
       
       const data = await response.json();
-      addLog(`Received project data: ${data.projectDir || 'unknown'}`);
+      addLog(`קיבלתי נתוני פרויקט: ${data.projectDir || 'לא ידוע'}`);
       setProjectData(data);
       
       // Check if we have component status data from another endpoint
-      const statusUrl = `/api/generate/status?project=${projectName}`;
+      const statusUrl = `/api/generate/status?project=${encodeURIComponent(projectDir)}`;
       addLog(`Fetching status from: ${statusUrl}`);
       const statusResponse = await fetch(statusUrl);
       
@@ -193,7 +200,7 @@ export default function Preview({ projectName }: PreviewProps) {
       
       setPreviewStatus({
         status: 'running',
-        url: `/api/generate/preview?project=${projectName}`
+        url: `/api/generate/preview?project=${encodeURIComponent(projectDir)}`
       });
       
       // אם האתר עדיין לא מוכן, הכן אותו
@@ -201,10 +208,10 @@ export default function Preview({ projectName }: PreviewProps) {
         initSitePreview();
       }
     } catch (error) {
-      addLog(`Error in fetchProjectData: ${error instanceof Error ? error.message : String(error)}`);
+      addLog(`שגיאה בהבאת נתוני הפרויקט: ${error instanceof Error ? error.message : String(error)}`);
       setPreviewStatus({
         status: 'error',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'שגיאה לא ידועה'
       });
     }
   };
@@ -263,15 +270,15 @@ export default function Preview({ projectName }: PreviewProps) {
 
   useEffect(() => {
     // Initial fetch
-    if (projectName) {
-      addLog(`Initializing preview for project: ${projectName}`);
+    if (projectDir) {
+      addLog(`Initializing preview for project: ${projectDir}`);
       fetchProjectData();
       
       // Set up polling to refresh data every 3 seconds
       const interval = setInterval(fetchProjectData, 3000);
       setPollingInterval(interval);
     } else {
-      addLog('No project name provided');
+      addLog('No project dir provided');
       setPreviewStatus({
         status: 'error',
         error: 'שם פרויקט לא סופק'
@@ -285,14 +292,14 @@ export default function Preview({ projectName }: PreviewProps) {
         clearInterval(pollingInterval);
       }
     };
-  }, [projectName]);
+  }, [projectDir]);
 
   if (previewStatus.status === 'loading') {
     return (
       <div className="flex flex-col items-center justify-center p-4">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mb-4"></div>
         <span className="mb-2">טוען תצוגה מקדימה...</span>
-        <div className="text-xs text-gray-500">{projectName}</div>
+        <div className="text-xs text-gray-500">{projectDir}</div>
       </div>
     );
   }
@@ -456,35 +463,154 @@ export default function Preview({ projectName }: PreviewProps) {
     );
   };
 
+  // הוסף רינדור לקומפוננטות שנכשלו
+  const renderFailedComponents = () => {
+    const failedComponents = components.filter(c => c.status === 'failed');
+    
+    if (failedComponents.length === 0) {
+      return null;
+    }
+    
+    return (
+      <div className="mt-4 p-4 bg-red-50 rounded-lg border border-red-200">
+        <h3 className="text-red-700 text-lg font-medium mb-2">קומפוננטות שלא נוצרו בהצלחה</h3>
+        <div className="space-y-3">
+          {failedComponents.map((component) => (
+            <div key={component.name} className="border border-red-300 bg-white p-3 rounded-md">
+              <div className="flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h4 className="text-md font-semibold text-red-700">{component.name}</h4>
+              </div>
+              
+              {component.description && (
+                <p className="mt-1 text-sm text-gray-600">{component.description}</p>
+              )}
+              
+              {component.error && (
+                <div className="mt-2">
+                  <p className="text-xs font-medium text-red-700">שגיאה:</p>
+                  <pre className="mt-1 text-xs bg-red-50 p-2 rounded overflow-x-auto">{component.error}</pre>
+                </div>
+              )}
+              
+              {component.prompt && (
+                <div className="mt-2">
+                  <p className="text-xs font-medium text-gray-700">פרומפט:</p>
+                  <pre className="mt-1 text-xs bg-gray-50 p-2 rounded overflow-x-auto">{component.prompt}</pre>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+  
+  // הוסף רינדור לסקשנים שיווצרו בסוף
+  const renderSectionsToCreate = () => {
+    // אם אין נתונים עדיין או שאין סקשנים, אל תציג כלום
+    if (!projectData?.sections || projectData.sections.length === 0) {
+      return null;
+    }
+    
+    return (
+      <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+        <h3 className="text-blue-700 text-lg font-medium mb-2">סקשנים שיווצרו בפרויקט</h3>
+        <div className="space-y-2">
+          {projectData.sections.map((section: any, index: number) => (
+            <div key={index} className="border border-blue-200 bg-white p-3 rounded-md">
+              <div className="flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                </svg>
+                <h4 className="text-md font-semibold text-blue-700">{section.name || `סקשן ${index + 1}`}</h4>
+              </div>
+              
+              {section.description && (
+                <p className="mt-1 text-sm text-gray-600">{section.description}</p>
+              )}
+              
+              {section.components && section.components.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-xs font-medium text-gray-700">קומפוננטות:</p>
+                  <ul className="mt-1 space-y-1">
+                    {section.components.map((component: any, cIndex: number) => (
+                      <li key={cIndex} className="text-xs text-gray-600">• {component.name || `קומפוננטה ${cIndex + 1}`}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="w-full border border-gray-200 rounded-lg overflow-hidden">
-      <div className="p-4 bg-gray-50 border-b">
-        <h3 className="text-lg font-semibold">תצוגה מקדימה של הדף</h3>
-        <p className="text-sm text-gray-500">בניית דף הנחיתה בתהליך. תצוגה תתעדכן אוטומטית.</p>
+    <div className="bg-white rounded-lg shadow-lg overflow-hidden mb-8">
+      <div className="bg-blue-600 text-white py-3 px-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">תצוגה מקדימה של {projectDir}</h2>
+        {previewStatus.status === 'running' && (
+          <div className="flex items-center">
+            <div className="bg-green-500 h-2.5 w-2.5 rounded-full mr-2"></div>
+            <span className="text-xs">פעיל</span>
+          </div>
+        )}
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
-        <div className="md:col-span-2">
-          {renderLivePreview()}
+      <div className="p-4">
+        {/* Progress bar */}
+        <div className="mb-2 flex justify-between text-sm text-gray-600">
+          <span>התקדמות: {completedCount}/{totalCount} קומפוננטות</span>
+          <span>{Math.floor((completedCount / Math.max(totalCount, 1)) * 100)}%</span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mb-6">
+          <div 
+            className="bg-blue-600 h-2.5 rounded-full transition-all duration-500 ease-in-out" 
+            style={{ width: `${Math.floor((completedCount / Math.max(totalCount, 1)) * 100)}%` }}
+          ></div>
         </div>
         
-        <div className="md:col-span-1">
-          {renderProjectInfo()}
-          {renderComponentSkeletons()}
-          
-          {logs.length > 0 && (
-            <div className="mt-6 border-t pt-4">
-              <details className="text-xs">
-                <summary className="font-semibold cursor-pointer">לוגים אחרונים</summary>
-                <div className="mt-2 bg-gray-50 p-2 rounded font-mono">
-                  {logs.map((log, i) => (
-                    <div key={i}>{log}</div>
-                  ))}
-                </div>
-              </details>
+        {/* מידע על הפרויקט */}
+        {renderProjectInfo()}
+        
+        {/* הצג קומפוננטות שנכשלו */}
+        {renderFailedComponents()}
+        
+        {/* הצג סקשנים שיווצרו */}
+        {renderSectionsToCreate()}
+        
+        {/* Logs */}
+        <div className="mt-6">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-lg font-medium text-gray-700">לוגים</h3>
+            <div className="flex space-x-1">
+              {newComponents.map((component, index) => (
+                <span 
+                  key={index}
+                  className="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded"
+                >
+                  {component} הושלם
+                </span>
+              ))}
             </div>
-          )}
+          </div>
+          <div className="bg-gray-100 rounded p-3 text-sm font-mono h-36 overflow-y-auto">
+            {logs.length > 0 ? (
+              logs.map((log, index) => (
+                <div key={index} className="mb-1">{log}</div>
+              ))
+            ) : (
+              <div className="text-gray-500">אין לוגים עדיין...</div>
+            )}
+          </div>
         </div>
+        
+        {/* Preview iframe */}
+        {renderLivePreview()}
       </div>
     </div>
   );

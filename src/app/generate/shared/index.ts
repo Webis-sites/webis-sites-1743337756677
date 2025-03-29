@@ -1,4 +1,5 @@
 import { logger } from './logger';
+import { colorLogger } from './logger';
 import { ensureDirectoryExists, convertToValidDirectoryName } from './utils';
 import { FILE_TYPES, AI_MODELS } from './constants';
 import type { FormData, ComponentPlan, SitePlan } from './types';
@@ -8,6 +9,7 @@ import { FormDataSchema, SitePlanSchema, ComponentPlanSchema } from './types';
 export {
   // Logger
   logger,
+  colorLogger,
   
   // File utilities
   ensureDirectoryExists,

@@ -4,8 +4,8 @@ import { z } from 'zod';
  * Type for external dependency
  */
 export interface Dependency {
-  name: string;  // Package name in npm
-  version: string;  // Package version
+  name: string;
+  version: string;
 }
 
 /**
@@ -29,12 +29,10 @@ export interface GeneratedComponent {
 /**
  * Zod schema for component validation
  */
-export const ComponentSchema = z.object({
+export const componentSchema = z.object({
   code: z.string(),
-  dependencies: z.array(
-    z.object({
-      name: z.string(),
-      version: z.string()
-    })
-  ).optional()
+  dependencies: z.array(z.object({
+    name: z.string().min(1),
+    version: z.string().min(1)
+  })).optional()
 }); 

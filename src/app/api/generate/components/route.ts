@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'שם פרויקט לא סופק' }, { status: 400 });
     }
     
-    const baseDir = path.join(process.cwd(), 'tmp');
+    const baseDir = path.join(process.cwd(), 'landing-pages');
     const projectPath = path.join(baseDir, projectDir);
     const componentsDir = path.join(projectPath, 'src', 'components');
     

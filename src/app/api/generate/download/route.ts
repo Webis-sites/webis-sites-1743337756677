@@ -14,8 +14,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Missing project parameter' }, { status: 400 });
     }
     
-    // Use project directory in the project's tmp folder instead of os.tmpdir()
-    const baseDir = path.join(process.cwd(), 'tmp');
+    // Use project directory in the project's landing-pages folder instead of os.tmpdir()
+    const baseDir = path.join(process.cwd(), 'landing-pages');
     const projectPath = path.join(baseDir, projectDir);
     
     // Check if project exists

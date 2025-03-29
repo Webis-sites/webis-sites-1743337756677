@@ -1,6 +1,6 @@
 import path from 'path';
 import fs from 'fs/promises';
-import { FormData, logger, ensureDirectoryExists, convertToValidDirectoryName } from '../shared';
+import { FormData, logger, ensureDirectoryExists, convertToValidDirectoryName, AI_MODELS } from '../shared';
 import { createPackageJson } from './package';
 
 /**
@@ -207,120 +207,88 @@ export default function Home() {
 
 /**
  * Sets up the basic project structure
- * @param formData Form data with business information
- * @param baseDir Base directory path
- * @param customDirName Optional custom directory name for the project
+ * @param projectName The name of the project directory
  * @returns Project setup result
  */
-export async function setupProject(
-  formData: FormData,
-  baseDir: string,
-  customDirName?: string
-): Promise<ProjectSetupResult> {
+export async function setupProject(projectName: string): Promise<ProjectSetupResult> {
   try {
-    // Create valid directory name - use custom name if provided
-    const projectDir: string = customDirName || convertToValidDirectoryName(formData.businessName);
-    const projectPath: string = path.join(baseDir, projectDir);
-    
-    logger.startProcess(`Project Setup: ${projectDir}`);
-    logger.info(`Creating project at path: ${projectPath}`);
-    
-    // Create base directories
-    await ensureDirectoryExists(path.join(projectPath, 'src', 'app'));
-    await ensureDirectoryExists(path.join(projectPath, 'src', 'components'));
-    await ensureDirectoryExists(path.join(projectPath, 'public'));
-    
-    // Create configuration files
-    await fs.writeFile(
-      path.join(projectPath, 'package.json'),
-      createPackageJson(formData),
-      'utf-8'
-    );
-    logger.fileCreated('package.json');
-    
-    await fs.writeFile(
-      path.join(projectPath, 'tailwind.config.js'),
-      createTailwindConfig(formData),
-      'utf-8'
-    );
-    logger.fileCreated('tailwind.config.js');
-    
-    await fs.writeFile(
-      path.join(projectPath, 'postcss.config.js'),
-      `module.exports = {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
-  },
-}`,
-      'utf-8'
-    );
-    logger.fileCreated('postcss.config.js');
-    
-    await fs.writeFile(
-      path.join(projectPath, 'tsconfig.json'),
-      createTsConfig(),
-      'utf-8'
-    );
-    logger.fileCreated('tsconfig.json');
-    
-    // Create basic application files
-    await fs.writeFile(
-      path.join(projectPath, 'src', 'app', 'layout.tsx'),
-      createAppLayout(formData),
-      'utf-8'
-    );
-    logger.fileCreated('src/app/layout.tsx');
-    
-    await fs.writeFile(
-      path.join(projectPath, 'src', 'app', 'page.tsx'),
-      createRootPage(),
-      'utf-8'
-    );
-    logger.fileCreated('src/app/page.tsx');
-    
-    await fs.writeFile(
-      path.join(projectPath, 'src', 'app', 'globals.css'),
-      `@tailwind base;
-@tailwind components;
-@tailwind utilities;
+    // יצירת תיקיית landing-pages
+    const landingPagesDir = path.join(process.cwd(), 'landing-pages');
+    await ensureDirectoryExists(landingPagesDir);
+    logger.info(`Created landing-pages directory: ${landingPagesDir}`);
 
-:root {
-  --primary-color: ${formData.primaryColor};
-  --secondary-color: ${formData.secondaryColor};
-}
+    // יצירת תיקיית הפרויקט
+    const projectPath = path.join(landingPagesDir, projectName);
+    await ensureDirectoryExists(projectPath);
+    logger.info(`Created project directory: ${projectPath}`);
 
-body {
-  direction: ${formData.language === 'he' ? 'rtl' : 'ltr'};
-}
+    // יצירת תיקיות המשנה
+    const srcPath = path.join(projectPath, 'src');
+    const appPath = path.join(srcPath, 'app');
+    const componentsPath = path.join(srcPath, 'components');
+    const publicPath = path.join(projectPath, 'public');
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
-}`,
-      'utf-8'
-    );
-    logger.fileCreated('src/app/globals.css');
-    
-    // Create project summary for logging
-    const projectSummary: Record<string, string | boolean> = {
-      'Project Name': projectDir,
-      'Business Type': formData.businessType,
-      'Industry': formData.industry,
-      'Language': formData.language,
-      'RTL Support': formData.language === 'he'
+    await Promise.all([
+      ensureDirectoryExists(srcPath),
+      ensureDirectoryExists(appPath),
+      ensureDirectoryExists(componentsPath),
+      ensureDirectoryExists(publicPath)
+    ]);
+
+    logger.info(`Created project subdirectories in: ${projectPath}`);
+
+    // וידוא שכל התיקיות נוצרו בהצלחה
+    await Promise.all([
+      fs.access(srcPath),
+      fs.access(appPath),
+      fs.access(componentsPath),
+      fs.access(publicPath)
+    ]);
+
+    // יצירת קובץ package.json ואיתחול פרויקט בסיסי
+    const formData: FormData = {
+      businessName: projectName,
+      description: 'A website generated with Next.js',
+      businessType: 'business',
+      industry: 'general',
+      primaryColor: '#3b82f6',
+      secondaryColor: '#10b981',
+      language: 'he',
+      includeTestimonials: false,
+      includeFAQ: false,
+      hasProducts: false,
+      hasServices: false,
+      hasPortfolio: false,
+      needsBookingSystem: false,
+      designStyles: [],
+      aiModel: AI_MODELS.CLAUDE_3_7_SONNET
     };
     
-    logger.summary('Project Setup Summary', projectSummary);
-    logger.endProcess(`Project Setup: ${projectDir}`);
+    // יצירת קבצי הבסיס
+    const packageJsonContent = createPackageJson(formData);
+    const tsConfigContent = createTsConfig();
+    const tailwindConfigContent = createTailwindConfig(formData);
+    const appLayoutContent = createAppLayout(formData);
+    const rootPageContent = createRootPage();
+    
+    // כתיבת הקבצים
+    await Promise.all([
+      fs.writeFile(path.join(projectPath, 'package.json'), packageJsonContent),
+      fs.writeFile(path.join(projectPath, 'tsconfig.json'), tsConfigContent),
+      fs.writeFile(path.join(projectPath, 'tailwind.config.js'), tailwindConfigContent),
+      fs.writeFile(path.join(appPath, 'layout.tsx'), appLayoutContent),
+      fs.writeFile(path.join(appPath, 'page.tsx'), rootPageContent),
+      fs.writeFile(path.join(appPath, 'globals.css'), `@tailwind base;\n@tailwind components;\n@tailwind utilities;`)
+    ]);
+    
+    logger.info(`Created base project files in: ${projectPath}`);
     
     return {
       projectPath,
-      projectDir
+      projectDir: projectName
     };
-  } catch (error: unknown) {
-    logger.error('Error setting up project structure', error);
+  } catch (error) {
+    logger.error(`Failed to setup project: ${error instanceof Error ? error.message : String(error)}`);
     throw error;
   }
 } 

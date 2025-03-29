@@ -441,7 +441,20 @@ export default function Home() {
         throw new Error(data.error);
       }
 
+      if (!data.projectName) {
+        console.error(`${consoleColors.red}❌ [Form] No project directory returned from server 🔴${consoleColors.reset}`);
+        throw new Error('לא התקבל שם פרויקט מהשרת');
+      }
+
+      // שמירת תוצאות היצירה
+      setGenerationResult({
+        projectName: data.projectName,
+        status: data.status
+      });
+
       console.log(`${consoleColors.cyan}🚀 [Form] Form submitted successfully${consoleColors.green} 🌟${consoleColors.reset}`);
+      
+      // הפניה לדף התצוגה המקדימה רק אחרי שיש לנו את כל המידע
       router.push(`/preview/${data.projectName}`);
     } catch (error) {
       console.error(`${consoleColors.red}❌ [Form] Error: ${error} 🔴${consoleColors.reset}`);
@@ -711,7 +724,7 @@ export default function Home() {
         <div className="mb-8">
           <h2 className="text-2xl font-semibold mb-4">תצוגה מקדימה</h2>
           <div className="bg-white rounded-lg shadow-lg p-4">
-            <Preview projectName={generationResult.projectName} />
+            <Preview projectDir={generationResult.projectName} />
           </div>
         </div>
       )}

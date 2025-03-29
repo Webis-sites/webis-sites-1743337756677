@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "outDir": "dist",
+    "noEmit": false,
+    "jsx": "react",
+    "moduleResolution": "node",
+    "target": "es2017",
+    "lib": ["es2017", "esnext.asynciterable"],
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["server/**/*"],
+  "exclude": ["node_modules"]
+} 

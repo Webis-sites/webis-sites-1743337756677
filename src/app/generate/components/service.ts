@@ -1,6 +1,6 @@
 import { generateObject } from 'ai';
 import { anthropic } from '@ai-sdk/anthropic';
-import { Component, ComponentSchema, GeneratedComponent } from './types';
+import { Component, componentSchema, GeneratedComponent, Dependency } from './types';
 import { FormData, logger, ensureDirectoryExists, AI_MODELS } from '../shared';
 import { createComponentPromptWithJSON } from './prompts';
 import { getFileExtension, getTargetDirectory, ensureUseClientDirective } from './utils';
@@ -32,72 +32,71 @@ export async function generateComponent(
     const targetDir: string = getTargetDirectory(fileName, projectDir);
     const filePath: string = path.join(targetDir, fileName + extension);
     
-    // Check if filePath is a directory before trying to write to it
-    try {
-      const stat = await fs.stat(filePath).catch(() => null);
-      if (stat && stat.isDirectory()) {
-        // If it's a directory, add an index file
-        const indexPath = path.join(filePath, `index${extension}`);
-        logger.warn(`${filePath} is a directory, writing to ${indexPath} instead`);
-        
-        await ensureDirectoryExists(indexPath);
-        
-        const result: Component = await getComponentCodeAndDependencies(fileName, componentPrompt, formData);
-        
-        // Ensure the code has 'use client' directive if needed
-        const enhancedCode: string = ensureUseClientDirective(result.code);
-        
-        await fs.writeFile(indexPath, enhancedCode, 'utf-8');
-        logger.fileCreated(indexPath);
-        
-        // Safely handle dependencies
-        const dependencies = result.dependencies || [];
-        
-        if (dependencies.length > 0) {
-          const packageJsonPath: string = path.join(projectDir, 'package.json');
-          const packageJsonContent: string = await fs.readFile(packageJsonPath, 'utf-8');
-          const packageJson: { dependencies: Record<string, string> } = JSON.parse(packageJsonContent);
+    // Check if filePath is a directory
+    const stat = await fs.stat(filePath).catch(() => null);
+    if (stat && stat.isDirectory()) {
+      // If it's a directory, add an index file
+      const indexPath = path.join(filePath, `index${extension}`);
+      logger.warn(`${filePath} is a directory, writing to ${indexPath} instead`);
+      
+      await ensureDirectoryExists(path.dirname(indexPath));
+      
+      const result: Component = await getComponentCodeAndDependencies(fileName, componentPrompt, formData);
+      
+      // Ensure the code has 'use client' directive if needed
+      const enhancedCode: string = ensureUseClientDirective(result.code);
+      
+      await fs.writeFile(indexPath, enhancedCode, 'utf-8');
+      logger.fileCreated(indexPath);
+      
+      // Safely handle dependencies
+      const dependencies: Dependency[] = (result.dependencies || []).filter((dep): dep is Dependency => 
+        typeof dep.name === 'string' && 
+        typeof dep.version === 'string' && 
+        dep.name.length > 0 && 
+        dep.version.length > 0
+      );
+      
+      if (dependencies.length > 0) {
+        const packageJsonPath: string = path.join(projectDir, 'package.json');
+        const packageJsonContent: string = await fs.readFile(packageJsonPath, 'utf-8');
+        const packageJson: { dependencies: Record<string, string> } = JSON.parse(packageJsonContent);
 
-          dependencies.forEach(dep => {
-            if (!packageJson.dependencies[dep.name]) {
-              packageJson.dependencies[dep.name] = dep.version;
-              logger.info(`📦 Added dependency: ${dep.name}@${dep.version}`);
-            }
-          });
-
-          await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
-        }
-        
-        logger.summary('Component Generation Results', {
-          'Component Name': fileName.split('/').pop()?.replace(/\.[^/.]+$/, '') || fileName,
-          'File Path': `${fileName}/index${extension}`,
-          'Dependencies Added': dependencies.length,
-          'File Size': enhancedCode.length,
+        dependencies.forEach(dep => {
+          if (!packageJson.dependencies[dep.name]) {
+            packageJson.dependencies[dep.name] = dep.version;
+            logger.info(`📦 Added dependency: ${dep.name}@${dep.version}`);
+          }
         });
-        
-        logger.endProcess(`Component Generation: ${name}`);
-        
-        // Update page.tsx with the new component
-        await updatePageWithComponent(projectDir, fileName, name);
-        
-        // Build and return the generated component result
-        const generatedComponent: GeneratedComponent = {
-          name: fileName.split('/').pop()?.replace(/\.[^/.]+$/, '') || fileName,
-          code: enhancedCode,
-          dependencies: dependencies,
-          path: `${fileName}/index${extension}`
-        };
-        
-        return generatedComponent;
+
+        await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
       }
-    } catch (statError) {
-      logger.warn(`Error checking if path is a directory: ${statError}`);
-      // Continue with normal file creation if there's an error checking the path
+      
+      logger.summary(`Component Generation Results:
+Component Name: ${fileName.split('/').pop()?.replace(/\.[^/.]+$/, '') || fileName}
+File Path: ${fileName + extension}
+Dependencies Added: ${dependencies.length}
+File Size: ${enhancedCode.length}`);
+      
+      logger.endProcess(`Component Generation: ${name}`);
+      
+      // Update page.tsx with the new component
+      await updatePageWithComponent(projectDir, fileName, name);
+      
+      // Build and return the generated component result
+      const generatedComponent: GeneratedComponent = {
+        name: fileName.split('/').pop()?.replace(/\.[^/.]+$/, '') || fileName,
+        code: enhancedCode,
+        dependencies: dependencies,
+        path: `${fileName}/index${extension}`
+      };
+      
+      return generatedComponent;
     }
     
     // Normal file creation flow
-    await ensureDirectoryExists(filePath);
-
+    await ensureDirectoryExists(path.dirname(filePath));
+    
     const result: Component = await getComponentCodeAndDependencies(fileName, componentPrompt, formData);
     
     // Ensure the code has 'use client' directive if needed
@@ -105,9 +104,14 @@ export async function generateComponent(
     
     await fs.writeFile(filePath, enhancedCode, 'utf-8');
     logger.fileCreated(filePath);
-
+    
     // Safely handle dependencies
-    const dependencies = result.dependencies || [];
+    const dependencies: Dependency[] = (result.dependencies || []).filter((dep): dep is Dependency => 
+      typeof dep.name === 'string' && 
+      typeof dep.version === 'string' && 
+      dep.name.length > 0 && 
+      dep.version.length > 0
+    );
     
     if (dependencies.length > 0) {
       const packageJsonPath: string = path.join(projectDir, 'package.json');
@@ -123,19 +127,18 @@ export async function generateComponent(
 
       await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
     }
-
-    logger.summary('Component Generation Results', {
-      'Component Name': fileName.split('/').pop()?.replace(/\.[^/.]+$/, '') || fileName,
-      'File Path': fileName + extension,
-      'Dependencies Added': dependencies.length,
-      'File Size': enhancedCode.length,
-    });
+    
+    logger.summary(`Component Generation Results:
+Component Name: ${fileName.split('/').pop()?.replace(/\.[^/.]+$/, '') || fileName}
+File Path: ${fileName + extension}
+Dependencies Added: ${dependencies.length}
+File Size: ${enhancedCode.length}`);
     
     logger.endProcess(`Component Generation: ${name}`);
-
+    
     // Update page.tsx with the new component
     await updatePageWithComponent(projectDir, fileName, name);
-
+    
     // Build and return the generated component result
     const generatedComponent: GeneratedComponent = {
       name: fileName.split('/').pop()?.replace(/\.[^/.]+$/, '') || fileName,
@@ -143,10 +146,10 @@ export async function generateComponent(
       dependencies: dependencies,
       path: fileName + extension
     };
-
+    
     return generatedComponent;
   } catch (error: unknown) {
-    logger.error(`Error generating component ${name}`, error);
+    logger.error(`Error generating component ${name}: ${error instanceof Error ? error.message : String(error)}`);
     throw error;
   }
 }
@@ -179,10 +182,10 @@ async function getComponentCodeAndDependencies(
         const prompt: string = createComponentPromptWithJSON(name, componentPrompt, formData);
         
         const response = await generateObject({
-          model: anthropic(AI_MODELS.CLAUDE_3_SONNET),
-          schema: ComponentSchema,
-          maxTokens: 6000, // Ensure enough tokens for complete response
-          temperature: 0.5, // Lower temperature for more consistent results
+          model: anthropic(AI_MODELS.CLAUDE_3_7_SONNET),
+          schema: componentSchema,
+          maxTokens: 4000,
+          temperature: 0.5,
           prompt
         });
         
@@ -190,12 +193,8 @@ async function getComponentCodeAndDependencies(
         
         // Log token usage for this request
         if (usage) {
-          logger.aiResponse(
-            'Claude 3.7 Sonnet', 
-            object.code.length,
-            usage.promptTokens || 0,
-            usage.completionTokens || 0
-          );
+          logger.updateTokenInfo(usage.promptTokens || 0, usage.completionTokens || 0);
+          logger.aiResponse('Claude 3.7 Sonnet', object.code.length);
         } else {
           logger.aiResponse('Claude 3.7 Sonnet', object.code.length);
         }
@@ -205,9 +204,21 @@ async function getComponentCodeAndDependencies(
           throw new Error(`AI response missing required 'code' field for component ${name}`);
         }
         
+        // Validate dependencies
+        const dependencies: Dependency[] = (object.dependencies || []).filter((dep: unknown): dep is Dependency => 
+          typeof dep === 'object' &&
+          dep !== null &&
+          'name' in dep &&
+          'version' in dep &&
+          typeof dep.name === 'string' && 
+          typeof dep.version === 'string' && 
+          dep.name.length > 0 && 
+          dep.version.length > 0
+        );
+        
         return {
           code: object.code,
-          dependencies: object.dependencies || []
+          dependencies
         };
       } catch (attemptError) {
         error = attemptError;
@@ -225,7 +236,7 @@ async function getComponentCodeAndDependencies(
           
           return {
             code: fallbackCode,
-            dependencies: []
+            dependencies: [] as Dependency[]
           };
         }
       }
@@ -234,7 +245,7 @@ async function getComponentCodeAndDependencies(
     // Should never reach here due to fallback, but TypeScript needs this
     throw error || new Error(`Failed to generate component ${name} after ${maxRetries} attempts`);
   } catch (error: unknown) {
-    logger.error('Error in AI component generation', error);
+    logger.error(`Error in AI component generation: ${error instanceof Error ? error.message : String(error)}`);
     throw error;
   }
 }
@@ -372,7 +383,7 @@ async function updatePageWithComponent(
     logger.info(`Updated page.tsx with component ${componentName}`);
     
   } catch (error) {
-    logger.error(`Error updating page.tsx with component ${componentName}`, error);
+    logger.error(`Error updating page.tsx with component ${componentName}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -427,6 +438,6 @@ async function updateComponentWithDataAttribute(
     logger.info(`עודכנה קומפוננטה ${componentName} עם data-component`);
     
   } catch (error) {
-    logger.error(`שגיאה בעדכון מאפיין data-component לקומפוננטה ${componentName}`, error);
+    logger.error(`שגיאה בעדכון מאפיין data-component לקומפוננטה ${componentName}: ${error instanceof Error ? error.message : String(error)}`);
   }
 } 

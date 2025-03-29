@@ -4,28 +4,28 @@ import { z } from 'zod';
  * Type representing the form data for site generation
  */
 export interface FormData {
-  businessName: string;       // Business name
-  businessType: string;       // Business type (e.g., store, restaurant, service business)
-  industry: string;           // Industry (e.g., technology, fashion, healthcare)
-  businessSize: string;       // Business size
-  description: string;        // Business description
-  language: string;           // Site language (he/en)
-  primaryColor: string;       // Primary color (hex format)
-  secondaryColor: string;     // Secondary color (hex format)
-  typographyStyle: string;    // Preferred typography style
-  animationPreference: string; // Animation preferences
-  headline: string;           // Main headline (if predefined)
-  descriptionText: string;    // Description text (if predefined)
-  ctaText: string;            // Call-to-action text (if predefined)
-  formFields: string;         // Custom form fields (comma-separated)
-  includeTestimonials: boolean;
-  includeFAQ: boolean;
-  hasProducts: boolean;
-  hasServices: boolean;
-  hasPortfolio: boolean;
-  needsBookingSystem: boolean;
-  metaDescription: string;     // Meta description for SEO
-  metaKeywords: string;        // Meta keywords for SEO
+  businessName?: string;       // Business name
+  businessType?: string;       // Business type (e.g., store, restaurant, service business)
+  industry?: string;           // Industry (e.g., technology, fashion, healthcare)
+  businessSize?: string;       // Business size
+  description?: string;        // Business description
+  language?: string;           // Site language (he/en)
+  primaryColor?: string;       // Primary color (hex format)
+  secondaryColor?: string;     // Secondary color (hex format)
+  typographyStyle?: string;    // Preferred typography style
+  animationPreference?: string; // Animation preferences
+  headline?: string;           // Main headline (if predefined)
+  descriptionText?: string;    // Description text (if predefined)
+  ctaText?: string;            // Call-to-action text (if predefined)
+  formFields?: string;         // Custom form fields (comma-separated)
+  includeTestimonials?: boolean;
+  includeFAQ?: boolean;
+  hasProducts?: boolean;
+  hasServices?: boolean;
+  hasPortfolio?: boolean;
+  needsBookingSystem?: boolean;
+  metaDescription?: string;     // Meta description for SEO
+  metaKeywords?: string;        // Meta keywords for SEO
   tagline?: string;           // Tagline for the business
   features?: string[];        // Additional features or services
   aiModel?: string;           // AI model for generation

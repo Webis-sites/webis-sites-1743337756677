@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateComponent } from '../../generate/components';
+import { generateComponent } from '@/app/generate/components/service';
 import { setupProject } from '../../generate/project';
-import { generateSitePlan } from '../../generate/plan';
+import { generateSitePlan } from '@/app/generate/plan/service';
 import { 
   FormData as ProjectFormData, 
   FormDataSchema, 
   SitePlan, 
   ComponentPlan,
-  logger 
+  logger,
+  ensureDirectoryExists,
+  convertToValidDirectoryName
 } from '../../generate/shared';
+import { colorLogger } from '../../generate/shared/logger';
+import { Dependency } from '../../generate/components/types';
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
@@ -47,12 +51,13 @@ interface ApiResponse {
     totalTokens: number;
     requests: number;
   };
+  deployedUrl?: string;
 }
 
 // Type for error response
 interface ErrorResponse {
   error: string;
-  details: unknown;
+  details?: string;
 }
 
 /**
@@ -85,7 +90,7 @@ function processFormData(data: Record<string, any>): Record<string, any> {
     result.language = 'he';
   }
   
-  logger.info(`Processed form data: ${JSON.stringify(result).substring(0, 100)}...`);
+  colorLogger.info(`Processed form data: ${JSON.stringify(result).substring(0, 100)}...`);
   return result;
 }
 
@@ -94,26 +99,45 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse |
     // Reset token counters at the start of the process
     logger.resetTokens();
     
+    // יצירת לוג גדול ויפה להתחלת התהליך
+    colorLogger.startProcess('STARTING WEBSITE GENERATION');
+    colorLogger.info('Creating a new awesome website with all required components');
+    
+    // יצירת תיקיית landing-pages
+    const landingPagesDir = path.join(process.cwd(), 'landing-pages');
+    await ensureDirectoryExists(landingPagesDir);
+    colorLogger.filesystem(`Created landing-pages directory: ${landingPagesDir}`);
+    
     // Try to get form data directly
     let formDataObj: Record<string, any>;
     
     try {
       // Try getting form data directly
       const formData = await req.formData();
-      logger.info('Received form data');
+      colorLogger.info('Received form data');
       
       // Convert to plain object
       formDataObj = {};
       formData.forEach((value, key) => {
-        formDataObj[key] = value;
+        // Convert checkbox values to booleans
+        if (value === 'on' || value === 'true') {
+          formDataObj[key] = true;
+        } else if (value === 'off' || value === 'false') {
+          formDataObj[key] = false;
+        } else if (key === 'designStyles') {
+          // Convert designStyles string to array
+          formDataObj[key] = value ? value.toString().split(',').map(s => s.trim()) : [];
+        } else {
+          formDataObj[key] = value;
+        }
       });
       
-      logger.info(`Parsed form fields: ${Object.keys(formDataObj).join(', ')}`);
+      colorLogger.info(`Parsed form fields: ${Object.keys(formDataObj).join(', ')}`);
     } catch (formError) {
       // If not form data, try as URL encoded or JSON
       try {
         const rawData = await req.text();
-        logger.info(`Received raw data (${rawData.length} bytes)`);
+        colorLogger.info(`Received raw data (${rawData.length} bytes)`);
         
         // Check if it's URL encoded form data
         if (rawData.includes('&') && rawData.includes('=')) {
@@ -121,15 +145,29 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse |
           formDataObj = {};
           
           params.forEach((value, key) => {
-            formDataObj[key] = value;
+            // Convert checkbox values to booleans
+            if (value === 'on' || value === 'true') {
+              formDataObj[key] = true;
+            } else if (value === 'off' || value === 'false') {
+              formDataObj[key] = false;
+            } else if (key === 'designStyles') {
+              // Convert designStyles string to array
+              formDataObj[key] = value ? value.toString().split(',').map(s => s.trim()) : [];
+            } else {
+              formDataObj[key] = value;
+            }
           });
           
-          logger.info(`Parsed as URL encoded form data: ${Object.keys(formDataObj).join(', ')}`);
+          colorLogger.info(`Parsed as URL encoded form data: ${Object.keys(formDataObj).join(', ')}`);
         } else {
           // Try to parse as JSON as last resort
           try {
             formDataObj = JSON.parse(rawData);
-            logger.info(`Parsed as JSON data: ${Object.keys(formDataObj).join(', ')}`);
+            // Convert designStyles to array if it's a string
+            if (formDataObj.designStyles && typeof formDataObj.designStyles === 'string') {
+              formDataObj.designStyles = formDataObj.designStyles.split(',').map(s => s.trim());
+            }
+            colorLogger.info(`Parsed as JSON data: ${Object.keys(formDataObj).join(', ')}`);
           } catch (jsonError) {
             return NextResponse.json<ErrorResponse>({
               error: 'Failed to parse request data',
@@ -145,16 +183,15 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse |
       }
     }
     
-    // Process the form data to handle special fields
-    const processedData = processFormData(formDataObj);
-    
     // Validate the form data against our schema
-    const formDataResult = FormDataSchema.safeParse(processedData);
+    const formDataResult = FormDataSchema.safeParse(formDataObj);
     
     if (!formDataResult.success) {
+      const errorDetails = JSON.stringify(formDataResult.error.format());
+      colorLogger.error(`Invalid form data: ${errorDetails}`);
       return NextResponse.json<ErrorResponse>({ 
         error: 'Invalid form data structure', 
-        details: formDataResult.error.format() 
+        details: errorDetails
       }, { status: 400 });
     }
     
@@ -162,26 +199,89 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse |
     
     logger.startProcess('API: Generate Project & Components');
     
-    // Create a project name with business name and timestamp
+    // יצירת שם הפרויקט
     const timestamp = new Date().getTime();
-    const safeBusinessName = formData.businessName.replace(/[^a-zA-Z0-9\u0590-\u05FF]/g, '-');
-    const projectDirName = `landing-page-${safeBusinessName}-${timestamp}`;
+    const safeBusinessName = formData.businessName 
+      ? formData.businessName.replace(/[^a-zA-Z0-9\u0590-\u05FF]/g, '-')
+      : 'landing-page';
+    const projectName = `${safeBusinessName}-${timestamp}`;
+
+    // הגדרת תיקיית הפרויקט
+    const { projectPath, projectDir } = await setupProject(projectName);
+    logger.info(`Project setup completed: ${projectPath}`);
     
-    // Use a directory in the current project instead of os.tmpdir()
-    const baseDir: string = path.join(process.cwd(), 'tmp');
-    
-    // Ensure the tmp directory exists
-    await fs.mkdir(baseDir, { recursive: true });
-    
-    // Setup the project structure with the custom project directory name
-    const { projectPath, projectDir }: ProjectSetupResult = await setupProject(
-      formData,
-      baseDir,
-      projectDirName
-    );
+    // וידוא שהתיקייה נוצרה בהצלחה
+    try {
+      await fs.access(projectPath);
+      logger.info(`Project directory created successfully at: ${projectPath}`);
+    } catch (error) {
+      logger.error(`Failed to access project directory: ${projectPath}`);
+      throw new Error(`Failed to access project directory: ${projectPath}`);
+    }
+
+    // וידוא שהתיקיות המשניות נוצרו בהצלחה
+    const requiredDirs = [
+      path.join(projectPath, 'src', 'app'),
+      path.join(projectPath, 'src', 'components'),
+      path.join(projectPath, 'public')
+    ];
+
+    for (const dir of requiredDirs) {
+      try {
+        await fs.access(dir);
+        logger.info(`Subdirectory created successfully: ${dir}`);
+      } catch (error) {
+        logger.error(`Failed to access subdirectory: ${dir}`);
+        throw new Error(`Failed to access subdirectory: ${dir}`);
+      }
+    }
     
     // Generate a plan for the site components
-    const sitePlan: SitePlan = await generateSitePlan(formData);
+    let sitePlan: SitePlan = {
+      businessName: '',
+      businessType: '',
+      industry: '',
+      theme: {
+        primaryColor: '',
+        secondaryColor: '',
+        language: 'he'
+      },
+      components: []
+    };
+    
+    try {
+      sitePlan = await generateSitePlan(formData);
+    } catch (error) {
+      // טיפול בשגיאות Anthropic
+      if (error instanceof Error) {
+        if (error.message.includes('429')) {
+          return NextResponse.json<ErrorResponse>({
+            error: 'שגיאת מכסה מ-Anthropic',
+            details: 'אנא בדוק את פרטי החיוב והמכסה שלך.'
+          }, { status: 429 });
+        }
+        
+        if (error.message.includes('401') || error.message.includes('403')) {
+          return NextResponse.json<ErrorResponse>({
+            error: 'שגיאת הרשאות ב-Anthropic',
+            details: 'אנא בדוק את מפתח ה-API שלך.'
+          }, { status: 401 });
+        }
+        
+        if (error.message.includes('500') || error.message.includes('503')) {
+          return NextResponse.json<ErrorResponse>({
+            error: 'שגיאת שירות ב-Anthropic',
+            details: 'אנא נסה שוב מאוחר יותר.'
+          }, { status: 503 });
+        }
+        
+        // טיפול בשגיאות אחרות
+        return NextResponse.json<ErrorResponse>({
+          error: 'שגיאה לא צפויה',
+          details: error.message
+        }, { status: 500 });
+      }
+    }
     
     // Generate components based on the plan
     const results: EnhancedComponentResult[] = [];
@@ -193,7 +293,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse |
     );
     
     // Log the total number of components to generate
-    logger.info(`🏗️ Generating ${sortedComponents.length} components for ${formData.businessName}`);
+    logger.info(`🏗️ Generating ${sortedComponents.length} components for ${formData.businessName || 'landing page'}`);
     
     // Track completed and failed components
     let completedComponents = 0;
@@ -296,7 +396,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse |
         results.push({
           name: component.name.split('/').pop() || component.name,
           code: "",
-          dependencies: [],
+          dependencies: [] as Dependency[],
           path: component.name,
           description: component.description,
           type: component.type,
@@ -349,28 +449,78 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse |
     logger.tokenSummary();
     
     // End the process with project directory name
-    logger.endProcess('API: Generate Project & Components', projectDir);
+    colorLogger.success('WEBSITE GENERATION COMPLETED SUCCESSFULLY');
+    colorLogger.info(`Total tokens used: ${logger.tokenInfo.totalTokens}`);
+    colorLogger.endProcess(`API: Generate Project & Components - ${projectDir}`);
     
-    // Return the successful response with status information
-    return NextResponse.json<ApiResponse>({
+    // If all components were generated successfully, trigger deployment
+    let deployedUrl: string | undefined;
+    const successRatio = completedComponents / sortedComponents.length;
+    if (successRatio >= 0.5) { // אם לפחות 50% מהרכיבים נוצרו בהצלחה
+      try {
+        const deployResponse = await fetch(`${req.nextUrl.origin}/api/generate/deploy`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ projectDir }),
+        });
+        
+        const deployResult = await deployResponse.json();
+        if (deployResult.success && deployResult.url) {
+          deployedUrl = deployResult.url;
+          colorLogger.success(`Project deployed successfully: ${deployedUrl}`);
+        } else {
+          // בדוק אם יש שגיאה ספציפית
+          if (deployResult.error && 
+             (deployResult.error.includes('Vercel CLI is not authenticated') || 
+              deployResult.error.includes('VERCEL_TOKEN is not set'))) {
+            // במקרה של שגיאת הרשאות Vercel, נציג הודעה למשתמש
+            colorLogger.warning(`Deployment limited to local preview: ${deployResult.error}`);
+            deployedUrl = deployResult.url; // קישור לתצוגה מקומית
+          } else {
+            colorLogger.error(`Deployment failed: ${deployResult.error}`);
+          }
+        }
+      } catch (deployError) {
+        colorLogger.error(`Failed to trigger deployment: ${deployError}`);
+      }
+    }
+    
+    // Return the response with all necessary information
+    const response: ApiResponse = {
       success: true,
       projectDir,
       projectPath,
       sitePlan,
       components: results,
       status: {
-        totalComponents: sortedComponents.length,
-        completedComponents,
-        failedComponents,
-        progress: Math.round(progress)
+        totalComponents: sitePlan.components.length,
+        completedComponents: results.filter(c => c.status === 'completed').length,
+        failedComponents: results.filter(c => c.status === 'failed').length,
+        progress: Math.round((results.filter(c => c.status === 'completed').length / sitePlan.components.length) * 100)
       },
       tokenUsage: {
         totalInputTokens: logger.tokenInfo.totalInputTokens,
         totalOutputTokens: logger.tokenInfo.totalOutputTokens,
         totalTokens: logger.tokenInfo.totalTokens,
         requests: logger.tokenInfo.requests
-      }
-    });
+      },
+      deployedUrl
+    };
+
+    // וידוא שהתשובה מכילה את כל המידע הנדרש
+    if (!response.projectDir) {
+      throw new Error('Project directory not included in response');
+    }
+
+    if (!response.projectPath) {
+      throw new Error('Project path not included in response');
+    }
+
+    colorLogger.info(`Returning response with project directory: ${response.projectDir}`);
+    // should create a repo, deploy to vercel and get a url for the website in vercel using the .sh fil
+    return NextResponse.json(response);
   } catch (error: unknown) {
     const errorMessage: string = error instanceof Error ? error.message : 'Unknown error';
     console.error('Error in generate API route:', error);
@@ -380,4 +530,4 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse |
       { status: 500 }
     );
   }
-}
+} 

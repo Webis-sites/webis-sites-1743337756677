@@ -20,9 +20,10 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@versions/*": ["./tmp/versions/*"]
+      "@landing-pages/*": ["./landing-pages/*"],
+      "@versions/*": ["./landing-pages/versions/*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "tmp/**/*.ts", "tmp/**/*.tsx"],
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "landing-pages/**/*.ts", "landing-pages/**/*.tsx"],
   "exclude": ["node_modules"]
 }
