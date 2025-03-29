@@ -21,7 +21,7 @@ import fs from 'fs/promises';
 import type { GeneratedComponent } from '../../generate/components';
 import type { ProjectSetupResult } from '../../generate/project';
 
-import { updateGenerationStatus } from './status/route';
+import { updateGenerationStatus } from './status/status-manager';
 
 // Type for enhanced component result
 interface EnhancedComponentResult extends GeneratedComponent {

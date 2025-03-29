@@ -2,58 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import fs from 'fs/promises';
 import { logger } from '../../../generate/shared/logger';
-
-// Interface for component status
-interface ComponentStatus {
-  name: string;
-  type: string;
-  status: 'completed' | 'failed' | 'pending';
-  error?: string;
-  prompt?: string;
-  description?: string;
-}
-
-// Interface for project status
-interface ProjectStatus {
-  projectDir: string;
-  status: {
-    totalComponents: number;
-    completedComponents: number;
-    failedComponents: number;
-    progress: number;
-  };
-  components: ComponentStatus[];
-}
-
-// Map to store statuses for active generation processes
-const activeGenerations = new Map<string, ProjectStatus>();
-
-/**
- * Updates the status of a project generation
- */
-function updateGenerationStatus(
-  projectDir: string, 
-  status: {
-    totalComponents: number;
-    completedComponents: number;
-    failedComponents: number;
-    progress: number;
-  },
-  components: ComponentStatus[]
-): void {
-  activeGenerations.set(projectDir, {
-    projectDir,
-    status,
-    components
-  });
-
-  // We might want to clean up old statuses after some time
-  setTimeout(() => {
-    if (activeGenerations.has(projectDir)) {
-      activeGenerations.delete(projectDir);
-    }
-  }, 1000 * 60 * 30); // 30 minutes
-}
+import { ComponentStatus, getGenerationStatus } from './status-manager';
 
 /**
  * GET handler for status requests
@@ -100,61 +49,62 @@ async function getComponentsStatus(projectPath: string) {
   let importedComponents: Array<{ name: string; path: string }> = [];
   
   try {
-    // Read page content to check for imported components
+    // קרא את תוכן הדף
     pageContent = await fs.readFile(pagePath, 'utf-8');
     
-    // Extract imported components from page content
-    const importRegex = /import\s+(\w+)\s+from\s+['"]\.\.\/components\/([^'"]+)['"]/g;
+    // מצא את כל הייבואים של הקומפוננטות
+    const importRegex = /import\s+{\s*([^}]+)\s*}\s+from\s+['"]([^'"]+)['"]/g;
     let match;
     while ((match = importRegex.exec(pageContent)) !== null) {
-      importedComponents.push({
-        name: match[1],
-        path: match[2]
+      const componentNames = match[1].split(',').map(name => name.trim());
+      const importPath = match[2];
+      
+      componentNames.forEach(name => {
+        importedComponents.push({ name, path: importPath });
       });
     }
-  } catch (err) {
-    // Page might not exist yet
-    logger.warn(`Page file not found: ${pagePath}`);
+  } catch (error) {
+    logger.error('שגיאה בקריאת קובץ הדף', error);
   }
   
-  try {
-    // Get all component files
-    const componentFiles = await listComponentFiles(componentsDir);
-    
-    // Create component status objects
-    return componentFiles.map(file => {
-      const name = path.basename(file, path.extname(file));
-      const relativePath = path.relative(componentsDir, file).replace(path.extname(file), '');
-      const isImported = importedComponents.some(comp => 
-        comp.path.includes(relativePath) || comp.name === name
-      );
-      
-      return {
+  // בדוק את כל הקומפוננטות המיובאות
+  const components: ComponentStatus[] = [];
+  
+  for (const { name, path: importPath } of importedComponents) {
+    try {
+      const componentPath = path.join(projectPath, 'src', importPath);
+      await fs.access(componentPath);
+      components.push({
         name,
-        type: getComponentType(file),
-        path: relativePath,
-        status: isImported ? 'completed' : 'pending',
-        description: `${name} component for the landing page`
-      };
-    });
-  } catch (err) {
-    logger.error('Error getting component status', err);
-    return [];
+        type: 'component',
+        status: 'completed'
+      });
+    } catch (error) {
+      components.push({
+        name,
+        type: 'component',
+        status: 'failed',
+        error: 'קומפוננטה לא נמצאה'
+      });
+    }
   }
+  
+  return components;
 }
 
 async function getPageStatus(projectPath: string) {
   const pagePath = path.join(projectPath, 'src', 'app', 'page.tsx');
   
   try {
-    const pageStats = await fs.stat(pagePath);
+    await fs.access(pagePath);
     return {
-      exists: true,
-      lastModified: pageStats.mtime
+      status: 'completed',
+      error: null
     };
-  } catch (err) {
+  } catch (error) {
     return {
-      exists: false
+      status: 'failed',
+      error: 'קובץ הדף לא נמצא'
     };
   }
 }

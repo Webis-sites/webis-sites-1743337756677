@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { logger, FILE_TYPES } from '../shared';
+import { logger } from '../shared';
 
 /**
  * Gets appropriate file extension based on filename
