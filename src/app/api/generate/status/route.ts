@@ -31,7 +31,7 @@ const activeGenerations = new Map<string, ProjectStatus>();
 /**
  * Updates the status of a project generation
  */
-export function updateGenerationStatus(
+function updateGenerationStatus(
   projectDir: string, 
   status: {
     totalComponents: number;
