@@ -81,10 +81,30 @@ module.exports = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: 0 },
         },
+        "fade-in": {
+          from: { opacity: 0 },
+          to: { opacity: 1 },
+        },
+        "fade-out": {
+          from: { opacity: 1 },
+          to: { opacity: 0 },
+        },
+        "slide-in-from-top": {
+          from: { transform: "translateY(-100%)" },
+          to: { transform: "translateY(0)" },
+        },
+        "slide-in-from-bottom": {
+          from: { transform: "translateY(100%)" },
+          to: { transform: "translateY(0)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "fade-in": "fade-in 0.3s ease-in-out",
+        "fade-out": "fade-out 0.3s ease-in-out",
+        "slide-in-from-top": "slide-in-from-top 0.3s ease-out",
+        "slide-in-from-bottom": "slide-in-from-bottom 0.3s ease-out",
       },
     },
   },
@@ -206,6 +226,198 @@ export default function Home() {
 }
 
 /**
+ * Creates Next.js configuration file with Unsplash images support
+ */
+function createNextConfig(): string {
+  return `/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  images: {
+    domains: ['images.unsplash.com'],
+  },
+  i18n: {
+    locales: ['he', 'en'],
+    defaultLocale: 'he',
+    localeDetection: true,
+  },
+};
+
+module.exports = nextConfig;`;
+}
+
+/**
+ * Creates PostCSS configuration file
+ */
+function createPostcssConfig(): string {
+  return `module.exports = {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+};`;
+}
+
+/**
+ * Creates the globals.css file with Tailwind imports and CSS variables
+ */
+function createGlobalsCss(): string {
+  return `@tailwind base;
+@tailwind components;
+@tailwind utilities;
+ 
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 224 71.4% 4.1%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 71.4% 4.1%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 71.4% 4.1%;
+    --primary: 220.9 39.3% 11%;
+    --primary-foreground: 210 20% 98%;
+    --secondary: 220 14.3% 95.9%;
+    --secondary-foreground: 220.9 39.3% 11%;
+    --muted: 220 14.3% 95.9%;
+    --muted-foreground: 220 8.9% 46.1%;
+    --accent: 220 14.3% 95.9%;
+    --accent-foreground: 220.9 39.3% 11%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 224 71.4% 4.1%;
+    --radius: 0.5rem;
+  }
+ 
+  .dark {
+    --background: 224 71.4% 4.1%;
+    --foreground: 210 20% 98%;
+    --card: 224 71.4% 4.1%;
+    --card-foreground: 210 20% 98%;
+    --popover: 224 71.4% 4.1%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 210 20% 98%;
+    --primary-foreground: 220.9 39.3% 11%;
+    --secondary: 215 27.9% 16.9%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 215 27.9% 16.9%;
+    --muted-foreground: 217.9 10.6% 64.9%;
+    --accent: 215 27.9% 16.9%;
+    --accent-foreground: 210 20% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 215 27.9% 16.9%;
+    --input: 215 27.9% 16.9%;
+    --ring: 216 12.2% 83.9%;
+  }
+}
+ 
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}`;
+}
+
+/**
+ * Creates the SEO config file with default settings
+ */
+function createSeoConfig(formData: FormData): string {
+  return `import { Metadata } from 'next';
+
+/**
+ * בסיס נתונים לקביעת מטא-תיאור עבור SEO
+ */
+export interface SeoProps {
+  title?: string;
+  description?: string;
+  keywords?: string[];
+  ogImage?: string;
+  canonicalUrl?: string;
+}
+
+/**
+ * קביעות ברירת מחדל עבור מטא-תיאור
+ */
+export const defaultSeo: SeoProps = {
+  title: '${formData.businessName}',
+  description: '${formData.description || 'אתר עסקי מקצועי'}',
+  keywords: ['${formData.businessType}', '${formData.industry}', 'שירותים', 'עסק'],
+  ogImage: '/og-image.jpg',
+};
+
+/**
+ * יוצר מטא-תגים עבור כל עמוד
+ */
+export function constructMetadata({
+  title = defaultSeo.title,
+  description = defaultSeo.description,
+  keywords = defaultSeo.keywords,
+  ogImage = defaultSeo.ogImage,
+  canonicalUrl,
+}: SeoProps = defaultSeo): Metadata {
+  return {
+    title: title,
+    description: description,
+    keywords: keywords,
+    openGraph: {
+      title: title,
+      description: description,
+      images: [
+        {
+          url: ogImage,
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: title,
+      description: description,
+      images: [ogImage],
+    },
+    alternates: {
+      canonical: canonicalUrl,
+    },
+  };
+}`;
+}
+
+/**
+ * Creates the SEO metadata component
+ */
+function createSeoComponent(): string {
+  return `import React from 'react';
+import { constructMetadata, SeoProps } from '@/lib/seo-config';
+
+interface MetadataProps {
+  params: SeoProps;
+}
+
+export function generateMetadata({ params }: MetadataProps) {
+  return constructMetadata(params);
+}
+
+export default function Seo({ params }: { params: SeoProps }) {
+  return null; // This component doesn't render anything
+}`;
+}
+
+/**
+ * Creates a simple robots.txt file
+ */
+function createRobotsTxt(formData: FormData): string {
+  return `# robots.txt - ${formData.businessName}
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: ${formData.businessName.toLowerCase().replace(/\s+/g, '-')}.com/sitemap.xml`;
+}
+
+/**
  * Sets up the basic project structure
  * @param projectName The name of the project directory
  * @returns Project setup result
@@ -226,12 +438,14 @@ export async function setupProject(projectName: string): Promise<ProjectSetupRes
     const srcPath = path.join(projectPath, 'src');
     const appPath = path.join(srcPath, 'app');
     const componentsPath = path.join(srcPath, 'components');
+    const libPath = path.join(srcPath, 'lib');
     const publicPath = path.join(projectPath, 'public');
 
     await Promise.all([
       ensureDirectoryExists(srcPath),
       ensureDirectoryExists(appPath),
       ensureDirectoryExists(componentsPath),
+      ensureDirectoryExists(libPath),
       ensureDirectoryExists(publicPath)
     ]);
 
@@ -242,6 +456,7 @@ export async function setupProject(projectName: string): Promise<ProjectSetupRes
       fs.access(srcPath),
       fs.access(appPath),
       fs.access(componentsPath),
+      fs.access(libPath),
       fs.access(publicPath)
     ]);
 
@@ -270,15 +485,24 @@ export async function setupProject(projectName: string): Promise<ProjectSetupRes
     const tailwindConfigContent = createTailwindConfig(formData);
     const appLayoutContent = createAppLayout(formData);
     const rootPageContent = createRootPage();
+    const nextConfigContent = createNextConfig();
+    const postcssConfigContent = createPostcssConfig();
+    const globalsCssContent = createGlobalsCss();
+    const seoConfigContent = createSeoConfig(formData);
+    const robotsTxtContent = createRobotsTxt(formData);
     
     // כתיבת הקבצים
     await Promise.all([
       fs.writeFile(path.join(projectPath, 'package.json'), packageJsonContent),
       fs.writeFile(path.join(projectPath, 'tsconfig.json'), tsConfigContent),
       fs.writeFile(path.join(projectPath, 'tailwind.config.js'), tailwindConfigContent),
+      fs.writeFile(path.join(projectPath, 'next.config.js'), nextConfigContent),
+      fs.writeFile(path.join(projectPath, 'postcss.config.js'), postcssConfigContent),
+      fs.writeFile(path.join(projectPath, 'robots.txt'), robotsTxtContent),
       fs.writeFile(path.join(appPath, 'layout.tsx'), appLayoutContent),
       fs.writeFile(path.join(appPath, 'page.tsx'), rootPageContent),
-      fs.writeFile(path.join(appPath, 'globals.css'), `@tailwind base;\n@tailwind components;\n@tailwind utilities;`)
+      fs.writeFile(path.join(appPath, 'globals.css'), globalsCssContent),
+      fs.writeFile(path.join(libPath, 'seo-config.ts'), seoConfigContent)
     ]);
     
     logger.info(`Created base project files in: ${projectPath}`);

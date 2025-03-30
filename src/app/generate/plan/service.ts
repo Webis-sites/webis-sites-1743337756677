@@ -58,10 +58,17 @@ export async function generateSitePlan(formData: FormData): Promise<SitePlan> {
     
     // Log a summary of the plan
     logger.summary(`Site Plan Summary:
-      Total Components: ${sitePlan.components.length}
-      Business Type: ${sitePlan.businessType}
-      Language: ${sitePlan.theme?.language}
-      Component Types: ${sitePlan.components.map(c => c.type).join(', ')}`);
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 Total Components: ${sitePlan.components.length}
+🏢 Business Type: ${sitePlan.businessType}
+🌐 Language: ${sitePlan.theme?.language}
+
+📦 Component Types:
+${sitePlan.components.map(c => `   • ${c.type}`).join('\n')}
+
+🔧 Components:
+${sitePlan.components.map(c => `   • ${c.name}`).join('\n')}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     
     logger.endProcess('Generating Site Plan');
     
